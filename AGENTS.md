@@ -23,3 +23,8 @@ APK: `app/build/outputs/apk/debug/app-debug.apk` (debug-signed, installable).
   (`app/src/main/java/com/example/cgptswitcher/`); the manifest uses the relative `.MainActivity`.
 - Runtime requires root (Magisk) because it manipulates `/data/data/com.openai.chatgpt` and
   stores profiles under `/data/adb/chatgpt_switcher`.
+- Pindah profil dan "Sesi baru" auto-save state aktif ke profilnya (`ACTIVE` di prefs);
+  `_last` hanya dipakai kalau belum ada profil aktif. Snapshot selalu lewat `_tmp` lalu
+  di-`mv`, jadi profil tidak pernah setengah jadi.
+- Nama profil divalidasi (`[A-Za-z0-9 ._()-]{1,40}`, tidak diawali `_`) karena nilainya
+  masuk ke skrip root.

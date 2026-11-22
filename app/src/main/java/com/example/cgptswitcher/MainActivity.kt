@@ -14,6 +14,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val PKG  = "com.openai.chatgpt"
         const val ROOT = "/data/adb/chatgpt_switcher"
+
+        private val NAME_PATTERN = Regex("[A-Za-z0-9 ._()-]+")
     }
 
     private lateinit var prefs: SharedPreferences
@@ -61,9 +63,14 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- helpers ----------
 
-    private fun activeProfile(): String? = prefs.getString("active", null)
+    private fun activeProfile(): String? =
+        prefs.getString("active", null)?.takeIf { isValidName(it) }
     private fun setActive(name: String?) =
         prefs.edit().putString("active", name).apply()
+
+    /** Nama profil dipakai langsung di skrip root, jadi batasi karakternya. */
+    private fun isValidName(name: String) =
+        name.length in 1..40 && name[0] != '_' && NAME_PATTERN.matches(name)
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
 
@@ -86,7 +93,7 @@ class MainActivity : AppCompatActivity() {
                 mkdir -p $ROOT
                 ls -1 $ROOT 2>/dev/null | grep -v '^_' || true
             """.trimIndent(), timeoutSec = 10)
-            val names = if (r.ok) r.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            val names = if (r.ok) r.output.lines().map { it.trim() }.filter { isValidName(it) }
                         else emptyList()
             runOnUiThread {
                 profiles.clear(); profiles.addAll(names.sorted())
@@ -111,9 +118,23 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Simpan") { _, _ ->
                 val name = input.text.toString().trim()
-                if (name.isEmpty()) { toast("Nama kosong"); return@setPositiveButton }
-                saveNew(name)
+                when {
+                    name.isEmpty() -> toast("Nama kosong")
+                    !isValidName(name) ->
+                        toast("Pakai huruf, angka, spasi, titik, minus, garis bawah, atau kurung (maks 40)")
+                    profiles.contains(name) -> confirmOverwrite(name)
+                    else -> saveNew(name)
+                }
             }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun confirmOverwrite(name: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Profil \"$name\" sudah ada")
+            .setMessage("Simpan sesi sekarang sebagai \"$name\"? Isi profil lama akan diganti.")
+            .setPositiveButton("Ganti") { _, _ -> saveNew(name) }
             .setNegativeButton("Batal", null)
             .show()
     }
@@ -131,9 +152,11 @@ class MainActivity : AppCompatActivity() {
                 am force-stop "${'$'}PKG"
                 sleep 1
                 mkdir -p "${'$'}ROOT"
+                rm -rf "${'$'}ROOT/_tmp"
+                cp -a "${'$'}DATA" "${'$'}ROOT/_tmp"
+                chmod -R u+rwX "${'$'}ROOT/_tmp"
                 rm -rf "${'$'}ROOT/${'$'}NAME"
-                cp -a "${'$'}DATA" "${'$'}ROOT/${'$'}NAME"
-                chmod -R u+rwX "${'$'}ROOT/${'$'}NAME"
+                mv "${'$'}ROOT/_tmp" "${'$'}ROOT/${'$'}NAME"
                 echo OK
             """.trimIndent()
             val r = RootShell.run(script, timeoutSec = 120)
@@ -153,9 +176,9 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Mulai sesi baru?")
             .setMessage(
-                "State akun yang sedang login akan diarsipkan ke _last, " +
-                "lalu data app ChatGPT dikosongkan sehingga app terasa baru install " +
-                "dan menampilkan layar login.\n\n" +
+                "State akun yang sedang login disimpan dulu ke profilnya " +
+                "(atau ke _last kalau belum ada profil aktif), lalu data app ChatGPT " +
+                "dikosongkan sehingga app terasa baru install dan menampilkan layar login.\n\n" +
                 "TIDAK ada request logout ke server — token akun sebelumnya tetap hidup. " +
                 "Kamu bisa login akun lain, lalu simpan sebagai profil baru."
             )
@@ -171,6 +194,7 @@ class MainActivity : AppCompatActivity() {
                 set -e
                 PKG=$PKG
                 ROOT=$ROOT
+                ACTIVE="${activeProfile() ?: ""}"
                 DATA="/data/data/${'$'}PKG"
                 [ -d "${'$'}DATA" ] || { echo "app tidak terpasang"; exit 1; }
 
@@ -180,8 +204,16 @@ class MainActivity : AppCompatActivity() {
                 UID_ORIG=${'$'}(stat -c %u "${'$'}DATA")
                 GID_ORIG=${'$'}(stat -c %g "${'$'}DATA")
 
-                rm -rf "${'$'}ROOT/_last"
-                cp -a "${'$'}DATA" "${'$'}ROOT/_last"
+                # auto-save: state yang sedang login balik ke profil aktifnya
+                rm -rf "${'$'}ROOT/_tmp"
+                cp -a "${'$'}DATA" "${'$'}ROOT/_tmp"
+                if [ -n "${'$'}ACTIVE" ]; then
+                    rm -rf "${'$'}ROOT/${'$'}ACTIVE"
+                    mv "${'$'}ROOT/_tmp" "${'$'}ROOT/${'$'}ACTIVE"
+                else
+                    rm -rf "${'$'}ROOT/_last"
+                    mv "${'$'}ROOT/_tmp" "${'$'}ROOT/_last"
+                fi
 
                 rm -rf "${'$'}DATA"
                 mkdir -p "${'$'}DATA"
@@ -200,7 +232,7 @@ class MainActivity : AppCompatActivity() {
                 if (r.ok) {
                     setActive(null)
                     toast("Sesi baru siap — login dengan akun lain")
-                } else toast("Gagal: ${r.output}")
+                } else toast("Gagal: ${r.output}\nState lama ada di ${activeProfile() ?: "_last"}")
                 refreshList()
             }
         }.start()
@@ -212,8 +244,9 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Pindah ke profil \"$name\"?")
             .setMessage(
-                "App ChatGPT akan di-force stop, state sekarang disimpan sementara ke _last, " +
-                "lalu data profil \"$name\" dipulihkan dan app dibuka ulang.\n\n" +
+                "App ChatGPT akan di-force stop, perubahan pada akun yang sedang aktif " +
+                "disimpan dulu ke profilnya, lalu data profil \"$name\" dipulihkan dan " +
+                "app dibuka ulang.\n\n" +
                 "Tidak ada request logout ke server."
             )
             .setPositiveButton("Pindah") { _, _ -> switchTo(name) }
@@ -229,6 +262,7 @@ class MainActivity : AppCompatActivity() {
                 PKG=$PKG
                 ROOT=$ROOT
                 NAME="$name"
+                ACTIVE="${activeProfile() ?: ""}"
                 DATA="/data/data/${'$'}PKG"
                 SRC="${'$'}ROOT/${'$'}NAME"
                 [ -d "${'$'}SRC" ] || { echo "profil tidak ditemukan"; exit 1; }
@@ -237,8 +271,16 @@ class MainActivity : AppCompatActivity() {
                 am force-stop "${'$'}PKG"
                 sleep 1
 
-                rm -rf "${'$'}ROOT/_last"
-                cp -a "${'$'}DATA" "${'$'}ROOT/_last"
+                # auto-save: state sekarang disimpan ke profil yang sedang aktif
+                rm -rf "${'$'}ROOT/_tmp"
+                cp -a "${'$'}DATA" "${'$'}ROOT/_tmp"
+                if [ -n "${'$'}ACTIVE" ] && [ "${'$'}ACTIVE" != "${'$'}NAME" ]; then
+                    rm -rf "${'$'}ROOT/${'$'}ACTIVE"
+                    mv "${'$'}ROOT/_tmp" "${'$'}ROOT/${'$'}ACTIVE"
+                else
+                    rm -rf "${'$'}ROOT/_last"
+                    mv "${'$'}ROOT/_tmp" "${'$'}ROOT/_last"
+                fi
 
                 UID_ORIG=${'$'}(stat -c %u "${'$'}DATA")
                 GID_ORIG=${'$'}(stat -c %g "${'$'}DATA")
@@ -259,7 +301,7 @@ class MainActivity : AppCompatActivity() {
                 if (r.ok) {
                     setActive(name)
                     toast("Beralih ke $name")
-                } else toast("Gagal: ${r.output}")
+                } else toast("Gagal: ${r.output}\nState lama ada di ${activeProfile() ?: "_last"}")
                 refreshList()
             }
         }.start()

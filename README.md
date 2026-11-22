@@ -16,10 +16,12 @@ melakukan ini, semuanya lewat `su`:
 
 1. `am force-stop` aplikasi ChatGPT
 2. menyalin folder data ke `/data/adb/chatgpt_switcher/<nama profil>`
-3. saat pindah, data yang sedang aktif diarsipkan ke `_last`, lalu profil tujuan
-   disalin balik ke `/data/data/com.openai.chatgpt`
-4. `chown` dan `restorecon` supaya pemilik file dan label SELinux tetap benar
-5. aplikasi ChatGPT dibuka lagi
+3. sebelum pindah, data yang sedang aktif disimpan ulang ke profilnya sendiri, jadi
+   chat atau setting terbaru tidak hilang. Kalau belum ada profil aktif, salinannya
+   ditaruh di `_last`
+4. profil tujuan disalin balik ke `/data/data/com.openai.chatgpt`
+5. `chown` dan `restorecon` supaya pemilik file dan label SELinux tetap benar
+6. aplikasi ChatGPT dibuka lagi
 
 Tidak ada permintaan logout ke server. Token sesi akun lama tetap hidup di file
 profilnya, jadi waktu kamu balik lagi tidak perlu login.
@@ -60,7 +62,11 @@ APK. Buka tab Actions, pilih run terakhir, lalu unduh artifact `PindahSesi-debug
 4. Login akun kedua, simpan lagi dengan nama lain.
 5. Untuk ganti-ganti, tinggal ketuk nama profil di daftar.
 
-Ketuk lama nama profil untuk menghapusnya.
+Ketuk lama nama profil untuk menghapusnya. Nama profil boleh huruf, angka, spasi,
+titik, minus, garis bawah, dan tanda kurung, maksimal 40 karakter.
+
+Pindah profil dan "Sesi baru" otomatis menyimpan state akun yang sedang aktif, jadi
+tidak perlu menekan Simpan setiap kali habis chat.
 
 ## Isi folder profil
 
@@ -68,7 +74,7 @@ Ketuk lama nama profil untuk menghapusnya.
 /data/adb/chatgpt_switcher/
 ├── kerja/       # salinan penuh /data/data/com.openai.chatgpt
 ├── pribadi/
-└── _last/       # state terakhir sebelum pindah atau sesi baru
+└── _last/       # cadangan saat belum ada profil aktif
 ```
 
 ## Peringatan
