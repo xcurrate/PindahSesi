@@ -4,10 +4,10 @@ plugins {
 }
 
 android {
-    namespace = "com.example.chatgptswitcher"
+    namespace = "com.example.cgptswitcher"
     compileSdk = 34
     defaultConfig {
-        applicationId = "com.example.chatgptswitcher"
+        applicationId = "com.example.cgptswitcher"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
