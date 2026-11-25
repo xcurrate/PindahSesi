@@ -22,7 +22,6 @@ class MainActivity : AppCompatActivity() {
         const val BASE = "/data/adb/pindah_sesi"
         const val OLD_ROOT = "/data/adb/chatgpt_switcher"
 
-        private val NAME_PATTERN = Regex("[A-Za-z0-9 ._()-]+")
         private val PKG_PATTERN = Regex("[A-Za-z0-9._]+")
     }
 
@@ -91,9 +90,17 @@ class MainActivity : AppCompatActivity() {
     private fun setActive(name: String?) =
         prefs.edit().putString("active_$pkg", name).apply()
 
-    /** Nama profil dipakai langsung di skrip root, jadi batasi karakternya. */
+    /**
+     * Nama profil boleh apa saja, termasuk "@" dari alamat email. Yang dilarang
+     * hanya karakter yang bisa merusak path atau folder internal.
+     */
     private fun isValidName(name: String) =
-        name.length in 1..40 && name[0] != '_' && NAME_PATTERN.matches(name)
+        name.isNotBlank() && name.length <= 60 && name[0] != '_' &&
+            name != "." && name != ".." &&
+            name.none { it == '/' || it == '\n' || it == '\r' || it == '\u0000' }
+
+    /** Kutip satu nilai untuk shell: ' -> '\'' */
+    private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
     private fun migratePrefs() {
         val old = prefs.getString("active", null) ?: return
@@ -143,7 +150,7 @@ class MainActivity : AppCompatActivity() {
     private fun scriptHead(): String = """
         set -e
         BASE=$BASE
-        PKG="$pkg"
+        PKG=${q(pkg)}
         ROOT="${'$'}BASE/${'$'}PKG"
         DATA="/data/data/${'$'}PKG"
         if [ -d "$OLD_ROOT" ] && [ ! -e "${'$'}BASE/$DEFAULT_PKG" ]; then
@@ -169,7 +176,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val r = RootShell.run("""
                 BASE=$BASE
-                PKG="$pkg"
+                PKG=${q(pkg)}
                 ROOT="${'$'}BASE/${'$'}PKG"
                 if [ -d "$OLD_ROOT" ] && [ ! -e "${'$'}BASE/$DEFAULT_PKG" ]; then
                     mkdir -p "${'$'}BASE"
@@ -197,8 +204,12 @@ class MainActivity : AppCompatActivity() {
                 profiles.clear(); profiles.addAll(rows.map { it.first }.sorted())
                 sizes.clear(); sizes.putAll(rows.toMap())
                 adapter.notifyDataSetChanged()
-                status.text = "Aktif: ${activeProfile() ?: "—"}  •  " +
-                    "${profiles.size} profil  •  ${fmtSize(rows.sumOf { it.second })}"
+                status.text = if (!r.ok) {
+                    "Root gagal: ${r.output.ifBlank { "su tidak merespons" }}"
+                } else {
+                    "Aktif: ${activeProfile() ?: "—"}  •  " +
+                        "${profiles.size} profil  •  ${fmtSize(rows.sumOf { it.second })}"
+                }
                 uiIdle()
             }
         }.start()
@@ -251,7 +262,7 @@ class MainActivity : AppCompatActivity() {
                 when {
                     name.isEmpty() -> toast("Nama kosong")
                     !isValidName(name) ->
-                        toast("Pakai huruf, angka, spasi, titik, minus, garis bawah, atau kurung (maks 40)")
+                        toast("Nama tidak boleh mengandung / dan tidak diawali _, maks 60 karakter")
                     profiles.contains(name) -> confirmOverwrite(name)
                     else -> saveNew(name)
                 }
@@ -274,7 +285,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val r = RootShell.run("""
                 ${scriptHead()}
-                NAME="$name"
+                NAME=${q(name)}
                 [ -d "${'$'}DATA" ] || { echo "app tidak terpasang"; exit 1; }
                 am force-stop "${'$'}PKG"
                 sleep 1
@@ -375,7 +386,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val r = RootShell.run("""
                 ${scriptHead()}
-                NAME="$name"
+                NAME=${q(name)}
                 ACTIVE="${activeProfile() ?: ""}"
                 SRC="${'$'}ROOT/${'$'}NAME"
                 [ -d "${'$'}SRC" ] || { echo "profil tidak ditemukan"; exit 1; }
@@ -433,7 +444,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val r = RootShell.run("""
                 ${scriptHead()}
-                NAME="$name"
+                NAME=${q(name)}
                 [ -d "${'$'}ROOT/${'$'}NAME" ] || { echo "profil tidak ditemukan"; exit 1; }
                 rm -rf "${'$'}ROOT/${'$'}NAME/cache" "${'$'}ROOT/${'$'}NAME/code_cache"
                 find "${'$'}ROOT/${'$'}NAME" -type d \( -name GPUCache -o -name "Code Cache" \
@@ -455,7 +466,7 @@ class MainActivity : AppCompatActivity() {
                 Thread {
                     val r = RootShell.run("""
                         ${scriptHead()}
-                        NAME="$name"
+                        NAME=${q(name)}
                         rm -rf "${'$'}ROOT/${'$'}NAME"
                         echo OK
                     """.trimIndent(), timeoutSec = 30)

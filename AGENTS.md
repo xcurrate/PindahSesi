@@ -27,8 +27,10 @@ APK: `app/build/outputs/apk/debug/app-debug.apk` (debug-signed, installable).
 - Pindah profil dan "Sesi baru" auto-save state aktif ke profilnya (`active_<pkg>` di prefs);
   `_last` hanya dipakai kalau belum ada profil aktif. Snapshot selalu lewat `_tmp` lalu
   di-`mv`, jadi profil tidak pernah setengah jadi.
-- Nama profil divalidasi (`[A-Za-z0-9 ._()-]{1,40}`, tidak diawali `_`) dan nama paket
-  (`[A-Za-z0-9._]+`) karena keduanya masuk ke skrip root.
+- Nama profil boleh apa saja (termasuk `@`), hanya ditolak `/`, newline, `.`/`..`,
+  awalan `_`, dan > 60 karakter; nilainya di-`shQuote` (`q()`) sebelum masuk skrip root.
+  Nama paket divalidasi `[A-Za-z0-9._]+`. Jangan kembalikan filter ketat: profil lama
+  dengan `@` sempat hilang dari daftar karenanya.
 - `copy_data` (fungsi shell di `scriptHead()`) melewati `cache/` + `code_cache/` dan
   membuang `GPUCache`, `Code Cache`, `CacheStorage`. Ukuran per profil dibaca lewat
   `du -sk` di skrip daftar.

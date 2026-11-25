@@ -61,8 +61,8 @@ APK. Buka tab Actions, pilih run terakhir, lalu unduh artifact `PindahSesi-debug
    ditandai titik putih.
 
 Ketuk lama nama profil untuk membuka menu: **Hapus cache profil** atau **Hapus profil**.
-Nama profil boleh huruf, angka, spasi, titik, minus, garis bawah, dan tanda kurung,
-maksimal 40 karakter.
+Nama profil bebas, termasuk alamat email (`nama@gmail.com`). Yang tidak boleh cuma `/`,
+baris baru, dan awalan `_` (dipakai folder internal), maksimal 60 karakter.
 
 Pindah profil dan "Sesi baru" otomatis menyimpan state akun yang sedang aktif, jadi
 tidak perlu menekan Simpan setiap kali habis chat.
