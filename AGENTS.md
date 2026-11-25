@@ -1,8 +1,8 @@
 # AGENTS.md
 
 ## Project
-Android app (`PindahSesi` / "ChatGPT Switcher") that snapshots and swaps the data directory of
-`com.openai.chatgpt` using root (`su -c`). Kotlin, single activity, no tests.
+Android app (`PindahSesi`) that snapshots and swaps the data directory of any chosen
+package using root (`su -c`). Kotlin, single activity, no tests.
 
 ## Build
 Toolchain: JDK 21, Android SDK (compileSdk 34, build-tools 34.0.0), Gradle wrapper 8.10.2,
@@ -21,10 +21,14 @@ APK: `app/build/outputs/apk/debug/app-debug.apk` (debug-signed, installable).
 - `minSdk = 24` so the APK installs and runs on Android 7.0 through 14, including Android 10 (API 29).
 - `namespace`/`applicationId` is `com.example.cgptswitcher` and must match the Kotlin package
   (`app/src/main/java/com/example/cgptswitcher/`); the manifest uses the relative `.MainActivity`.
-- Runtime requires root (Magisk) because it manipulates `/data/data/com.openai.chatgpt` and
-  stores profiles under `/data/adb/chatgpt_switcher`.
-- Pindah profil dan "Sesi baru" auto-save state aktif ke profilnya (`ACTIVE` di prefs);
+- Runtime requires root (Magisk) because it manipulates `/data/data/<pkg>` and stores
+  profiles under `/data/adb/pindah_sesi/<pkg>/<nama>`; `com.openai.chatgpt` is the default
+  target and the old `/data/adb/chatgpt_switcher` tree is migrated on first run.
+- Pindah profil dan "Sesi baru" auto-save state aktif ke profilnya (`active_<pkg>` di prefs);
   `_last` hanya dipakai kalau belum ada profil aktif. Snapshot selalu lewat `_tmp` lalu
   di-`mv`, jadi profil tidak pernah setengah jadi.
-- Nama profil divalidasi (`[A-Za-z0-9 ._()-]{1,40}`, tidak diawali `_`) karena nilainya
-  masuk ke skrip root.
+- Nama profil divalidasi (`[A-Za-z0-9 ._()-]{1,40}`, tidak diawali `_`) dan nama paket
+  (`[A-Za-z0-9._]+`) karena keduanya masuk ke skrip root.
+- `copy_data` (fungsi shell di `scriptHead()`) melewati `cache/` + `code_cache/` dan
+  membuang `GPUCache`, `Code Cache`, `CacheStorage`. Ukuran per profil dibaca lewat
+  `du -sk` di skrip daftar.
