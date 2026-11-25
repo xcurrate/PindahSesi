@@ -2,13 +2,19 @@ package com.example.cgptswitcher
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
@@ -32,6 +38,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ArrayAdapter<String>
     private val profiles = mutableListOf<String>()
     private val sizes = mutableMapOf<String, Long>()
+
+    /** Paket hasil `pm list packages`, dipakai kalau daftar app diblokir ROM. */
+    private var fallbackPkgs: List<String> = emptyList()
 
     /** Paket yang sedang dikelola. Nama paket masuk ke skrip root, jadi divalidasi. */
     private val pkg: String
@@ -208,6 +217,13 @@ class MainActivity : AppCompatActivity() {
                 name to (parts[1].trim().toLongOrNull() ?: 0L)
             } else emptyList()
 
+            if (fallbackPkgs.isEmpty()) {
+                fallbackPkgs = RootShell.run("pm list packages -3 2>/dev/null", timeoutSec = 20)
+                    .output.lines()
+                    .map { it.trim().removePrefix("package:") }
+                    .filter { it.isNotEmpty() && it != packageName }
+            }
+
             runOnUiThread {
                 profiles.clear(); profiles.addAll(rows.map { it.first }.sorted())
                 sizes.clear(); sizes.putAll(rows.toMap())
@@ -228,32 +244,129 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- pilih app ----------
 
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
     private fun pickApp() {
         val pm = packageManager
-        val pairs = pm.queryIntentActivities(
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
-        ).mapNotNull { it.activityInfo?.applicationInfo }
-            .distinctBy { it.packageName }
-            .map { it.packageName to pm.getApplicationLabel(it).toString() }
-            .sortedBy { it.second.lowercase() }
+        val seen = linkedSetOf<String>()
+        val all = mutableListOf<Pair<String, String>>()   // label to paket
 
-        val items = pairs.map { "${it.second} · ${it.first}" }.toMutableList()
-        val pkgs = pairs.map { it.first }.toMutableList()
-        if (!pkgs.contains(pkg)) {
-            items.add(0, appLabel(pkg))
-            pkgs.add(0, pkg)
+        fun add(pkgName: String, label: String? = null) {
+            if (pkgName == packageName || !seen.add(pkgName)) return
+            val lbl = label ?: try {
+                pm.getApplicationLabel(pm.getApplicationInfo(pkgName, 0)).toString()
+            } catch (e: Exception) {
+                pkgName
+            }
+            all.add(lbl to pkgName)
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih app")
-            .setMessage("Data app ini yang akan disimpan dan ditukar. Hati-hati dengan app sistem.")
-            .setItems(items.toTypedArray()) { _, which ->
-                prefs.edit().putString("pkg", pkgs[which]).apply()
-                updateAppButton()
-                refreshList()
+        try {
+            pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+            ).forEach { ri -> ri.activityInfo?.applicationInfo?.packageName?.let { add(it) } }
+        } catch (e: Exception) {
+        }
+        try {
+            pm.getInstalledApplications(0).forEach { add(it.packageName) }
+        } catch (e: Exception) {
+        }
+        fallbackPkgs.forEach { add(it) }
+        all.sortBy { it.first.lowercase() }
+
+        val rows = mutableListOf<Pair<String, String>>()
+
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), 0)
+        }
+        if (all.isEmpty()) {
+            box.addView(TextView(this).apply {
+                text = "Daftar app tidak terbaca. Di MIUI/ColorOS, izinkan \"Akses daftar " +
+                    "aplikasi\" untuk Pindah Sesi. Sementara itu, ketik nama paketnya di " +
+                    "bawah, mis. com.discord"
+                setTextColor(0xFFFFB74D.toInt())
+                textSize = 13f
+                setPadding(0, 0, 0, dp(8))
+            })
+        }
+        val search = EditText(this).apply {
+            hint = "Cari app, atau ketik paket (com.discord)"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val list = ListView(this)
+        box.addView(search)
+        box.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(320)))
+
+        val adapter = object : BaseAdapter() {
+            override fun getCount() = rows.size
+            override fun getItem(position: Int) = rows[position]
+            override fun getItemId(position: Int) = position.toLong()
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = convertView ?: LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    addView(TextView(this@MainActivity).apply {
+                        setTextColor(0xFFFFFFFF.toInt())
+                        textSize = 16f
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        setTextColor(0xFF9E9E9E.toInt())
+                        textSize = 12f
+                    })
+                }
+                val row = v as LinearLayout
+                (row.getChildAt(0) as TextView).text = rows[position].first
+                (row.getChildAt(1) as TextView).text = rows[position].second
+                return v
             }
+        }
+        list.adapter = adapter
+
+        fun refilter() {
+            val q = search.text.toString().trim()
+            rows.clear()
+            rows.addAll(
+                all.filter {
+                    q.isEmpty() || it.first.contains(q, true) || it.second.contains(q, true)
+                }
+            )
+            if (q.matches(PKG_PATTERN) && rows.none { it.second == q }) {
+                rows.add(0, "Pakai paket \"$q\"" to q)
+            }
+            adapter.notifyDataSetChanged()
+        }
+        refilter()
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) = refilter()
+        })
+
+        val builder = AlertDialog.Builder(this)
+            .setTitle("Pilih app")
+            .setView(box)
             .setNegativeButton("Batal", null)
-            .show()
+        if (all.isEmpty()) {
+            builder.setNeutralButton("Izin") { _, _ ->
+                startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+            }
+        }
+        val dialog = builder.create()
+
+        list.setOnItemClickListener { _, _, pos, _ ->
+            prefs.edit().putString("pkg", rows[pos].second).apply()
+            updateAppButton()
+            dialog.dismiss()
+            refreshList()
+        }
+        dialog.show()
     }
 
     // ---------- 1. Simpan sesi sekarang ----------

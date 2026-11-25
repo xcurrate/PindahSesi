@@ -67,6 +67,22 @@ baris baru, dan awalan `_` (dipakai folder internal), maksimal 60 karakter.
 Pindah profil dan "Sesi baru" otomatis menyimpan state akun yang sedang aktif, jadi
 tidak perlu menekan Simpan setiap kali habis chat.
 
+## Kalau daftar app kosong
+
+Beberapa ROM (MIUI/HyperOS, ColorOS, realme UI) memblokir daftar aplikasi untuk app yang
+dipasang manual. Di dialog **Pilih app** hal ini ditandai dengan peringatan kuning. Ada
+tiga jalan keluar:
+
+1. PindahSesi otomatis mencoba membaca daftar paket lewat root (`pm list packages -3`),
+   jadi biasanya daftar tetap terisi walaupun izin itu dimatikan.
+2. Kalau tetap kosong: buka **Info app → Izin**, aktifkan "Akses daftar aplikasi"
+   (MIUI) atau sejenisnya, lalu buka dialognya lagi.
+3. Cara paling pasti: ketik nama paketnya langsung di kolom cari, misal `com.discord`,
+   lalu pilih baris `Pakai paket "com.discord"`.
+
+Nama paket bisa dilihat dari Info app aplikasi yang dituju, atau di Play Store pada URL
+`id=...`.
+
 ## Soal ukuran
 
 Folder data app bisa ratusan MB, tapi sebagian besar isinya cache. Yang disimpan cuma
