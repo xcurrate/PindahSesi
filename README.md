@@ -50,7 +50,7 @@ APK. Buka tab Actions, pilih run terakhir, lalu unduh artifact `PindahSesi-debug
 
 ## Pakai
 
-1. Tekan tombol **Target** di atas, pilih app yang mau diatur. Pilihannya diambil dari
+1. Tekan tombol **Ganti app** di atas, pilih app yang mau diatur. Pilihannya diambil dari
    app yang punya ikon launcher.
 2. Buka app itu, login seperti biasa.
 3. Balik ke PindahSesi, tekan **Simpan**, isi nama profil (misal `kerja`).

@@ -125,7 +125,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateAppButton() {
-        btnPickApp.text = "Target: ${appLabel(pkg)}"
+        btnPickApp.text = "Ganti app  ·  ${appLabel(pkg)}"
+    }
+
+    private val ver: String by lazy {
+        try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     private fun uiBusy(s: String) = runOnUiThread {
@@ -204,11 +212,14 @@ class MainActivity : AppCompatActivity() {
                 profiles.clear(); profiles.addAll(rows.map { it.first }.sorted())
                 sizes.clear(); sizes.putAll(rows.toMap())
                 adapter.notifyDataSetChanged()
-                status.text = if (!r.ok) {
-                    "Root gagal: ${r.output.ifBlank { "su tidak merespons" }}"
-                } else {
-                    "Aktif: ${activeProfile() ?: "—"}  •  " +
-                        "${profiles.size} profil  •  ${fmtSize(rows.sumOf { it.second })}"
+                status.text = when {
+                    !r.ok ->
+                        "v$ver  •  Root gagal: ${r.output.ifBlank { "su tidak merespons" }}"
+                    profiles.isEmpty() ->
+                        "v$ver  •  belum ada profil — pilih app, login, lalu tekan Simpan"
+                    else ->
+                        "v$ver  •  Aktif: ${activeProfile() ?: "—"}  •  " +
+                            "${profiles.size} profil  •  ${fmtSize(rows.sumOf { it.second })}"
                 }
                 uiIdle()
             }
